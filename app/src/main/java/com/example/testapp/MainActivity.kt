@@ -1,22 +1,19 @@
 package com.example.testapp
 
-import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
 import android.os.Bundle
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
-import android.widget.ToggleButton
 import android.widget.Toast
+import android.widget.ToggleButton
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.testapp.capture.ScreenCapture
 import com.example.testapp.core.FrameBus
@@ -42,12 +39,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var tv: TextView
     private lateinit var tgAuto: ToggleButton
 
-    // Android 13+ (khuyên) – xin POST_NOTIFICATIONS để foreground notif đẹp hơn
-    private val notifPermLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { _ -> startScreenCaptureFlow() }
-
-    // Activity Result API cho MediaProjection
+    // Dùng Activity Result API để xin quyền capture
     private val captureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -72,11 +64,6 @@ class MainActivity : ComponentActivity() {
 
         tgAuto.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) startAutoLoop() else stopAutoLoop()
-        }
-
-        // Android 13+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -110,7 +97,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startAutoLoop() {
-        // Chưa có frame → không cho bật
         if (FrameBus.latest.value == null) {
             tv.text = "Chưa có frame. Hãy bấm \"Bắt đầu quay màn hình\" rồi bật lại."
             tgAuto.isChecked = false
@@ -118,18 +104,17 @@ class MainActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
-            // Auto detect ROI 1 lần khi bật
             val frame = FrameBus.latest.filterNotNull().first()
             val roi = HpAutoRoi.detectHpRoiPct(frame)
             if (roi == null) {
-                tv.text = "Không tìm thấy ROI HP. Hãy bật khi thanh HP rõ."
+                tv.text = "Không tìm thấy ROI HP. Bật khi thanh HP hiển thị rõ."
                 tgAuto.isChecked = false
                 return@launch
             }
             roiHp = roi
             hpEma = null
             healing = false
-            tv.text = "Đã khóa ROI HP (${"%.3f".format(roi.x)}, ${"%.3f".format(roi.y)}) – Đang đọc…"
+            tv.text = "Đã khóa ROI HP (x=${"%.3f".format(roi.x)}, y=${"%.3f".format(roi.y)}) — Đang đọc…"
 
             loopJob?.cancel()
             loopJob = launch {
@@ -140,7 +125,7 @@ class MainActivity : ComponentActivity() {
                         val pct = hpEma ?: raw
                         tv.text = "HP: ${((pct * 100).coerceIn(0.0,100.0)).toInt()}%  |  ROI: x=${"%.3f".format(roi.x)} y=${"%.3f".format(roi.y)}"
 
-                        // Hysteresis: 25% để bật, 35% để tắt
+                        // Ngưỡng bật/tắt để tránh rung
                         if (!healing && pct < 0.25) {
                             sendTapHeal()
                             healing = true
@@ -161,7 +146,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun sendTapHeal() {
-        // Tap vào toạ độ tương đối (90% W, 85% H)
+        // Tap tương đối: 90% chiều rộng, 85% chiều cao (tuỳ game)
         val (w, h, _) = getDisplayDims()
         val x = (w * 0.90f)
         val y = (h * 0.85f)
