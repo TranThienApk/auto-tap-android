@@ -16,8 +16,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!--
+        <service
+            android:name=".service.MediaProjectionService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+        
         <service
             android:name=".service.KeepAliveService"
             android:exported="false"
@@ -38,7 +41,7 @@
         <service
             android:name=".service.OverlayService"
             android:exported="false" />
-        -->
+        
 
     </application>
 </manifest>
