@@ -1,96 +1,68 @@
 package com.example.testapp.vision
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import com.example.testapp.model.RoiPct
 import kotlin.math.max
 import kotlin.math.min
 
 object HpAutoRoi {
-    private const val SAT_MAX = 0.16f // S <= ~0.16
-    private const val VAL_MIN = 0.84f // V >= ~0.84
+    /**
+     * Tự động tìm ROI thanh HP dạng **vạch trắng ngang** ở nửa trên màn hình.
+     * Chiến lược: downscale, quét từng hàng để tìm dải pixel sáng liên tục dài nhất.
+     */
+    fun detectHpRoiPct(src: Bitmap): RoiPct? {
+        val targetW = 640
+        val scaled = HpDetector.scaleIfNeeded(src, targetW)
+        val w = scaled.width
+        val h = scaled.height
+        val topScan = (h * 0.45).toInt() // quét 45% đầu
 
-    fun detectHpRoiPct(full: Bitmap, searchBottomRatio: Float = 0.35f): RoiPct? {
-        val W = full.width; val H = full.height
-        if (W <= 0 || H <= 0) return null
+        var bestLen = 0
+        var bestY = -1
+        var bestStart = 0
+        var bestEnd = 0
 
-        val yStart = (H * (1f - searchBottomRatio)).toInt().coerceAtLeast(0)
-        val yEnd = H
-        val rowWhite = FloatArray(yEnd - yStart)
-        val hsv = FloatArray(3)
-
-        for (y in yStart until yEnd) {
-            var white = 0
-            for (x in 0 until W) {
-                Color.colorToHSV(full.getPixel(x, y), hsv)
-                if (hsv[1] <= SAT_MAX && hsv[2] >= VAL_MIN) white++
+        val threshold = 235 // độ sáng coi là "trắng"
+        val px = IntArray(w)
+        for (y in 0 until topScan) {
+            scaled.getPixels(px, 0, w, 0, y, w, 1)
+            var curStart = -1
+            var curLen = 0
+            var rowBestStart = 0
+            var rowBestLen = 0
+            for (x in 0 until w) {
+                val c = px[x]
+                val r = (c shr 16) and 0xFF
+                val g = (c shr 8) and 0xFF
+                val b = c and 0xFF
+                val bright = max(max(r, g), b)
+                val isWhite = bright >= threshold
+                if (isWhite) {
+                    if (curStart == -1) curStart = x
+                    curLen++
+                } else if (curStart != -1) {
+                    if (curLen > rowBestLen) { rowBestLen = curLen; rowBestStart = curStart }
+                    curStart = -1; curLen = 0
+                }
             }
-            rowWhite[y - yStart] = white.toFloat() / W
-        }
-        smooth(rowWhite, 9)
-
-        val band = bestBand(rowWhite, minBandPx = (H * 0.008f).toInt()) ?: return null
-        val bandTop = yStart + band.first
-        val bandBot = yStart + band.second
-
-        val colsFilled = BooleanArray(W)
-        for (x in 0 until W) {
-            var any = false
-            var y = bandTop
-            while (y <= bandBot) {
-                Color.colorToHSV(full.getPixel(x, y), hsv)
-                if (hsv[1] <= SAT_MAX && hsv[2] >= VAL_MIN) { any = true; break }
-                y++
+            if (curStart != -1 && curLen > rowBestLen) {
+                rowBestLen = curLen; rowBestStart = curStart
             }
-            colsFilled[x] = any
-        }
-        val left = colsFilled.indexOfFirst { it }
-        val right = colsFilled.indexOfLast { it }
-        if (left == -1 || right <= left) return null
-
-        val padY = ((bandBot - bandTop + 1) * 0.2f).toInt().coerceAtLeast(1)
-        val top = (bandTop - padY).coerceAtLeast(0)
-        val bottom = (bandBot + padY).coerceAtMost(H - 1)
-
-        val xPct = left.toFloat() / W
-        val yPct = top.toFloat() / H
-        val wPct = (right - left + 1).toFloat() / W
-        val hPct = (bottom - top + 1).toFloat() / H
-        return RoiPct(xPct, yPct, wPct, hPct)
-    }
-
-    private fun smooth(a: FloatArray, win: Int) {
-        if (win <= 1) return
-        val half = win / 2
-        val tmp = a.copyOf()
-        for (i in a.indices) {
-            var s = 0f; var c = 0
-            val L = max(0, i - half); val R = min(a.lastIndex, i + half)
-            for (j in L..R) { s += tmp[j]; c++ }
-            a[i] = if (c > 0) s / c else tmp[i]
-        }
-    }
-
-    private fun bestBand(row: FloatArray, minBandPx: Int): Pair<Int, Int>? {
-        val maxV = row.maxOrNull() ?: return null
-        val thr = maxV * 0.6f
-        var a = -1; var sum = 0f
-        var bestSum = 0f; var bestA = -1; var bestB = -1
-        for (i in row.indices) {
-            val v = row[i]
-            if (v >= thr) {
-                if (a == -1) { a = i; sum = 0f }
-                sum += v
-            } else if (a != -1) {
-                val b = i - 1
-                if ((b - a + 1) >= minBandPx && sum > bestSum) { bestSum = sum; bestA = a; bestB = b }
-                a = -1; sum = 0f
+            if (rowBestLen > bestLen) {
+                bestLen = rowBestLen; bestStart = rowBestStart; bestEnd = rowBestStart + rowBestLen; bestY = y
             }
         }
-        if (a != -1) {
-            val b = row.lastIndex
-            if ((b - a + 1) >= minBandPx && sum > bestSum) { bestSum = sum; bestA = a; bestB = b }
-        }
-        return if (bestA >= 0) bestA to bestB else null
+
+        if (bestLen < w * 0.15) return null // quá ngắn, coi như không thấy HP bar
+
+        val barH = (h * 0.02f).coerceAtLeast(2f) // 2% chiều cao
+        val y0 = max(0f, bestY - barH / 2)
+        val x0 = max(0f, bestStart.toFloat())
+        val x1 = min(w - 1f, bestEnd.toFloat())
+        val roi = RoiPct(
+            x = x0 / w, y = y0 / h,
+            w = (x1 - x0) / w, h = barH / h
+        )
+        return if (roi.w > 0f && roi.h > 0f) roi else null
     }
 }
