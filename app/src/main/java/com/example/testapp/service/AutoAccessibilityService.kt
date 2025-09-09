@@ -8,12 +8,15 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Path
 import android.view.accessibility.AccessibilityEvent
+import com.example.testapp.BuildConfig
 
 class AutoAccessibilityService : AccessibilityService() {
 
+    private val actionTap = BuildConfig.APPLICATION_ID + ".ACTION_TAP"
+
     private val tapReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.testapp.ACTION_TAP") {
+            if (intent?.action == actionTap) {
                 val x = intent.getFloatExtra("x", -1f)
                 val y = intent.getFloatExtra("y", -1f)
                 if (x >= 0 && y >= 0) tap(x, y)
@@ -23,7 +26,7 @@ class AutoAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        registerReceiver(tapReceiver, IntentFilter("com.example.testapp.ACTION_TAP"))
+        registerReceiver(tapReceiver, IntentFilter(actionTap))
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
