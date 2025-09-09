@@ -1,7 +1,6 @@
 package com.example.testapp.vision
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import com.example.testapp.model.RoiPct
 import kotlin.math.roundToInt
 
@@ -13,10 +12,7 @@ object HpDetector {
         return Bitmap.createScaledBitmap(src, targetW, nh, false)
     }
 
-    /**
-     * Tính phần trăm vùng pixel "sáng" trong ROI (giả định HP là dải sáng/nhạt).
-     * Trả về 0..1.
-     */
+    // Tỷ lệ pixel "sáng" trong ROI (coi là vạch HP). Trả 0..1.
     fun detectWhiteBarPercent(src: Bitmap, roi: RoiPct, thr: Int = 220): Double {
         val x0 = (roi.x * src.width).toInt().coerceIn(0, src.width - 1)
         val y0 = (roi.y * src.height).toInt().coerceIn(0, src.height - 1)
