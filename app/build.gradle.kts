@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.tranthien.autotap"   // 👈 thay bằng namespace/app id thật của bạn
+    namespace = "com.example.testapp"   // 👈 thay bằng namespace/app id thật của bạn
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.tranthien.autotap"  // 👈 ID chính của app
+        applicationId = "com.example.testapp"  // 👈 ID chính của app
         minSdk = 24
         targetSdk = 34
         versionCode = 1
