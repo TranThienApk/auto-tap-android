@@ -7,5 +7,6 @@ import kotlinx.coroutines.flow.asStateFlow
 object FrameBus {
     private val _latest = MutableStateFlow<Bitmap?>(null)
     val latest = _latest.asStateFlow()
-    fun update(frame: Bitmap) { _latest.value = frame }
+
+    fun update(bmp: Bitmap) { _latest.value = bmp }
 }
