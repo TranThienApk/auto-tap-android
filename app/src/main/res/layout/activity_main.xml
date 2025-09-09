@@ -5,23 +5,22 @@
 
     <Button
         android:id="@+id/btnStartCapture"
-        android:text="Bắt đầu quay màn hình (MediaProjection)"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
+        android:layout_height="wrap_content"
+        android:text="Bắt đầu quay màn hình" />
 
     <ToggleButton
         android:id="@+id/tgAuto"
-        android:textOn="Auto HP: ON"
-        android:textOff="Auto HP: OFF"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:textOn="Tự đọc HP: ON"
+        android:textOff="Tự đọc HP: OFF"
         android:layout_marginTop="12dp"/>
 
     <TextView
         android:id="@+id/tvStatus"
-        android:text="HP: -- %   ROI: chưa có"
-        android:textSize="16sp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingTop="12dp"/>
+        android:text="HP: -- %   ROI: chưa có"
+        android:layout_marginTop="12dp" />
 </LinearLayout>
