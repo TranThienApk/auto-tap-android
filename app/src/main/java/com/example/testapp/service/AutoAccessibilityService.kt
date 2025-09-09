@@ -23,8 +23,7 @@ class AutoAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        val f = IntentFilter("com.example.testapp.ACTION_TAP")
-        registerReceiver(tapReceiver, f)
+        registerReceiver(tapReceiver, IntentFilter("com.example.testapp.ACTION_TAP"))
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
