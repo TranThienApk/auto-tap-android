@@ -42,4 +42,13 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.constraintlayout:constraintlayout:2")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+
+    // Lifecycle + coroutine support (cho lifecycleScope)
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+
+    // Test libs (có thể xoá nếu không dùng)
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+}
