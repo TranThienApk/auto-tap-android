@@ -10,12 +10,14 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import java.nio.ByteBuffer
 
 class ScreenCapture(private val context: Context) {
     private var imageReader: ImageReader? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var handlerThread: HandlerThread? = null
+    private var frameCount = 0
 
     fun start(
         projection: MediaProjection,
@@ -38,10 +40,19 @@ class ScreenCapture(private val context: Context) {
         )
 
         imageReader!!.setOnImageAvailableListener({ reader ->
-            val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
-            val bmp = image.toBitmapSafely()
-            image.close()
-            if (bmp != null) onFrame(bmp)
+            var image: Image? = null
+            try {
+                image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+                val bmp = image.toBitmapSafely() ?: return@setOnImageAvailableListener
+
+                // Throttle: chỉ gửi mỗi 2 frame để giảm tải
+                frameCount++
+                if (frameCount % 2 == 0) onFrame(bmp)
+            } catch (t: Throwable) {
+                Log.w("ScreenCapture", "frame error: ${t.message}")
+            } finally {
+                try { image?.close() } catch (_: Throwable) {}
+            }
         }, handler)
     }
 
@@ -60,6 +71,7 @@ private fun Image.toBitmapSafely(): Bitmap? {
     val pixelStride = plane.pixelStride
     val rowStride = plane.rowStride
     val rowPadding = rowStride - pixelStride * width
+    if (pixelStride <= 0 || rowStride <= 0) return null
 
     val tmp = Bitmap.createBitmap(
         width + rowPadding / pixelStride,
@@ -67,5 +79,6 @@ private fun Image.toBitmapSafely(): Bitmap? {
         Bitmap.Config.ARGB_8888
     )
     tmp.copyPixelsFromBuffer(buffer)
+    // cắt bỏ phần padding sang đúng kích thước
     return if (rowPadding != 0) Bitmap.createBitmap(tmp, 0, 0, width, height) else tmp
 }
