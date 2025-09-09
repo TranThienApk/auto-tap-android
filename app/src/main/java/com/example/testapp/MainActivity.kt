@@ -1,16 +1,22 @@
 package com.example.testapp
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.Bundle
+import android.util.DisplayMetrics
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import android.widget.ToggleButton
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.testapp.capture.ScreenCapture
 import com.example.testapp.core.FrameBus
@@ -31,115 +37,144 @@ class MainActivity : ComponentActivity() {
     private var roiHp: RoiPct? = null
     private var hpEma: Double? = null
     private var loopJob: Job? = null
+    private var healing = false
+
+    private lateinit var tv: TextView
+    private lateinit var tgAuto: ToggleButton
+
+    // Android 13+ (khuyên) – xin POST_NOTIFICATIONS để foreground notif đẹp hơn
+    private val notifPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ -> startScreenCaptureFlow() }
+
+    // Activity Result API cho MediaProjection
+    private val captureLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val mpm = getSystemService(MediaProjectionManager::class.java)
+            projection = mpm.getMediaProjection(result.resultCode, result.data!!)
+            startCaptureSafe()
+        } else {
+            Toast.makeText(this, "Bạn đã không cho phép quay màn hình", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         val btnStart = findViewById<Button>(R.id.btnStartCapture)
-        val tgAuto   = findViewById<ToggleButton>(R.id.tgAuto)
-        val tv       = findViewById<TextView>(R.id.tvStatus)
+        tgAuto = findViewById(R.id.tgAuto)
+        tv = findViewById(R.id.tvStatus)
 
-        btnStart.setOnClickListener { requestMediaProjection() }
+        btnStart.setOnClickListener { startScreenCaptureFlow() }
 
         tgAuto.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                // Chưa có frame thì không cho ON
-                if (FrameBus.latest.value == null) {
-                    tv.text = "Chưa có frame. Hãy bấm 'Bắt đầu quay màn hình' rồi bật lại."
-                    tgAuto.isChecked = false
-                    return@setOnCheckedChangeListener
-                }
+            if (isChecked) startAutoLoop() else stopAutoLoop()
+        }
 
-                lifecycleScope.launch {
-                    // Tự tìm ROI 1 lần tại thời điểm bật
-                    val frame = FrameBus.latest.filterNotNull().first()
-                    val roi = HpAutoRoi.detectHpRoiPct(frame)
-                    if (roi == null) {
-                        tv.text = "Không tìm thấy ROI HP. Hãy bật khi thanh trắng rõ."
-                        tgAuto.isChecked = false
-                        return@launch
-                    }
-                    roiHp = roi
-                    hpEma = null
-                    tv.text = "Đã khóa ROI HP. Đang đọc…"
-
-                    loopJob?.cancel()
-                    loopJob = launch {
-                        while (true) {
-                            FrameBus.latest.value?.let { f ->
-                                val raw = HpDetector.detectWhiteBarPercent(f, roi)
-                                hpEma = HpDetector.ema(hpEma, raw, 0.6)
-                                val pct = hpEma ?: raw
-                                tv.text = "HP: ${(pct*100).toInt()}% | ROI: x=%.3f y=%.3f"
-                                    .format(roi.x, roi.y)
-                                // TODO: pct < 0.25 -> gọi Accessibility tap mua máu
-                            }
-                            delay(120)
-                        }
-                    }
-                }
-            } else {
-                loopJob?.cancel(); loopJob = null
-                roiHp = null; hpEma = null
-                tv.text = "HP: -- %   ROI: chưa có"
-            }
+        // Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
-    // -------- MediaProjection ----------
-    private fun requestMediaProjection() {
-        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        startActivityForResult(mpm.createScreenCaptureIntent(), 3366)
+    private fun startScreenCaptureFlow() {
+        val mpm = getSystemService(MediaProjectionManager::class.java)
+        captureLauncher.launch(mpm.createScreenCaptureIntent())
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 3366 && resultCode == Activity.RESULT_OK && data != null) {
-            val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            projection = mpm.getMediaProjection(resultCode, data)
-            startCaptureSafe()
-        }
+    private fun getDisplayDims(): Triple<Int, Int, Int> {
+        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getMetrics(dm)
+        return Triple(dm.widthPixels, dm.heightPixels, dm.densityDpi)
     }
 
     private fun startCaptureSafe() {
         try {
-            val (w, h, dpi) = run {
-                val wm = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    val b = wm.currentWindowMetrics.bounds
-                    val dm = resources.displayMetrics
-                    Triple(b.width(), b.height(), dm.densityDpi)
-                } else {
-                    val dm = resources.displayMetrics
-                    Triple(dm.widthPixels, dm.heightPixels, dm.densityDpi)
-                }
-            }
-
+            val (w, h, dpi) = getDisplayDims()
             capturer?.stop()
             capturer = ScreenCapture(this).apply {
                 start(requireNotNull(projection), w, h, dpi) { bmp ->
-                    val scaled = scaleIfNeeded(bmp, 1280)
+                    val scaled = HpDetector.scaleIfNeeded(bmp, 1280)
                     FrameBus.update(scaled)
                 }
             }
+            tv.text = "Đang nhận frame…"
         } catch (t: Throwable) {
-            // Nếu lỗi, hiển thị để biết
-            findViewById<TextView>(R.id.tvStatus).text = "Capture error: ${t.javaClass.simpleName}"
+            tv.text = "Capture error: ${t.javaClass.simpleName}"
         }
     }
 
-    private fun scaleIfNeeded(src: Bitmap, targetW: Int): Bitmap {
-        if (src.width <= targetW) return src
-        val ratio = targetW.toFloat() / src.width
-        val nh = (src.height * ratio).toInt().coerceAtLeast(1)
-        return Bitmap.createScaledBitmap(src, targetW, nh, false)
+    private fun startAutoLoop() {
+        // Chưa có frame → không cho bật
+        if (FrameBus.latest.value == null) {
+            tv.text = "Chưa có frame. Hãy bấm \"Bắt đầu quay màn hình\" rồi bật lại."
+            tgAuto.isChecked = false
+            return
+        }
+
+        lifecycleScope.launch {
+            // Auto detect ROI 1 lần khi bật
+            val frame = FrameBus.latest.filterNotNull().first()
+            val roi = HpAutoRoi.detectHpRoiPct(frame)
+            if (roi == null) {
+                tv.text = "Không tìm thấy ROI HP. Hãy bật khi thanh HP rõ."
+                tgAuto.isChecked = false
+                return@launch
+            }
+            roiHp = roi
+            hpEma = null
+            healing = false
+            tv.text = "Đã khóa ROI HP (${"%.3f".format(roi.x)}, ${"%.3f".format(roi.y)}) – Đang đọc…"
+
+            loopJob?.cancel()
+            loopJob = launch {
+                while (true) {
+                    FrameBus.latest.value?.let { f ->
+                        val raw = HpDetector.detectWhiteBarPercent(f, roi)
+                        hpEma = HpDetector.ema(hpEma, raw, 0.6)
+                        val pct = hpEma ?: raw
+                        tv.text = "HP: ${((pct * 100).coerceIn(0.0,100.0)).toInt()}%  |  ROI: x=${"%.3f".format(roi.x)} y=${"%.3f".format(roi.y)}"
+
+                        // Hysteresis: 25% để bật, 35% để tắt
+                        if (!healing && pct < 0.25) {
+                            sendTapHeal()
+                            healing = true
+                        } else if (healing && pct > 0.35) {
+                            healing = false
+                        }
+                    }
+                    delay(120)
+                }
+            }
+        }
+    }
+
+    private fun stopAutoLoop() {
+        loopJob?.cancel(); loopJob = null
+        roiHp = null; hpEma = null; healing = false
+        tv.text = "HP: -- %   ROI: chưa có"
+    }
+
+    private fun sendTapHeal() {
+        // Tap vào toạ độ tương đối (90% W, 85% H)
+        val (w, h, _) = getDisplayDims()
+        val x = (w * 0.90f)
+        val y = (h * 0.85f)
+        val intent = Intent("com.example.testapp.ACTION_TAP").apply {
+            putExtra("x", x)
+            putExtra("y", y)
+        }
+        sendBroadcast(intent)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        loopJob?.cancel()
+        stopAutoLoop()
         capturer?.stop()
         projection?.stop()
     }
