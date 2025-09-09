@@ -10,7 +10,6 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.os.Handler
 import android.os.HandlerThread
-import android.os.Looper
 import java.nio.ByteBuffer
 
 class ScreenCapture(private val context: Context) {
