@@ -2,13 +2,12 @@ package com.example.testapp.capture
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.PixelFormat
 import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
-import android.util.DisplayMetrics
 import android.view.Surface
 import java.nio.ByteBuffer
-import java.util.concurrent.Executors
 
 class ScreenCapture(private val context: Context) {
 
@@ -16,7 +15,8 @@ class ScreenCapture(private val context: Context) {
     private var vd: android.hardware.display.VirtualDisplay? = null
     private var projection: MediaProjection? = null
 
-    private val executor = Executors.newSingleThreadExecutor()
+    private var handlerThread: android.os.HandlerThread? = null
+    private var handler: android.os.Handler? = null
 
     fun start(
         mediaProjection: MediaProjection,
@@ -26,19 +26,20 @@ class ScreenCapture(private val context: Context) {
         stop()
 
         projection = mediaProjection
-        imageReader = ImageReader.newInstance(width, height, android.graphics.PixelFormat.RGBA_8888, 2)
+        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+
+        handlerThread = android.os.HandlerThread("SCapture").apply { start() }
+        handler = android.os.Handler(handlerThread!!.looper)
 
         imageReader?.setOnImageAvailableListener({ reader ->
             val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
             try {
-                val bmp = imageToBitmap(image)
-                if (bmp != null) onFrame(bmp)
+                imageToBitmap(image)?.let(onFrame)
             } catch (_: Throwable) {
-                // ignore
             } finally {
                 image.close()
             }
-        }, android.os.Handler(android.os.Looper.getMainLooper())) // main looper đủ dùng
+        }, handler)
 
         vd = projection?.createVirtualDisplay(
             "SC_CAPTURE",
@@ -54,7 +55,9 @@ class ScreenCapture(private val context: Context) {
         vd = null
         try { imageReader?.close() } catch (_: Throwable) {}
         imageReader = null
-        // Không stop projection ở đây; để MainActivity quản lý lifecycle
+        try { handlerThread?.quitSafely() } catch (_: Throwable) {}
+        handler = null
+        handlerThread = null
     }
 
     private fun imageToBitmap(image: Image): Bitmap? {
@@ -63,17 +66,18 @@ class ScreenCapture(private val context: Context) {
         val rowStride = plane.rowStride
         val rowPadding = rowStride - pixelStride * image.width
 
-        // Tạo bitmap có tính đến rowPadding, sau đó crop về width thật
+        // Tạo bitmap tính cả rowPadding, rồi crop về width thật
         val tmp = Bitmap.createBitmap(
-            image.width + rowPadding / pixelStride,
+            image.width + maxOf(0, rowPadding / pixelStride),
             image.height,
             Bitmap.Config.ARGB_8888
         )
         val buffer: ByteBuffer = plane.buffer
+        buffer.rewind()
         tmp.copyPixelsFromBuffer(buffer)
 
-        return Bitmap.createBitmap(tmp, 0, 0, image.width, image.height).also {
-            if (tmp !== it) tmp.recycle()
-        }
+        val out = Bitmap.createBitmap(tmp, 0, 0, image.width, image.height)
+        if (out !== tmp) tmp.recycle()
+        return out
     }
 }
