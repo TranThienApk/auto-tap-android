@@ -23,4 +23,14 @@
         android:layout_height="wrap_content"
         android:text="HP: -- %   ROI: chưa có"
         android:layout_marginTop="12dp" />
+
+    <!-- ✅ Preview để biết có frame hay không -->
+    <ImageView
+        android:id="@+id/ivPreview"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_weight="1"
+        android:adjustViewBounds="true"
+        android:scaleType="centerInside"/>
 </LinearLayout>
