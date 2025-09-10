@@ -18,8 +18,15 @@
         android:layout_width="match_parent" android:layout_height="wrap_content"
         android:text="Bật Trợ năng (Auto click)" android:layout_marginTop="12dp"/>
 
+    <ToggleButton
+        android:id="@+id/tgAutoHp"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textOn="Auto HP: ON" android:textOff="Auto HP: OFF"
+        android:layout_marginTop="12dp"/>
+
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Status: idle" android:layout_marginTop="12dp"/>
+        android:text="Status: idle"
+        android:layout_marginTop="12dp"/>
 </LinearLayout>
