@@ -1,18 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Cửa sổ nổi (xin trong Settings, không phải runtime) -->
+    <!-- Cửa sổ nổi -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- Foreground service để ghi màn hình ổn định -->
+
+    <!-- Foreground service để overlay/capture bền -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <!-- Android 13+: nếu bạn hiển thị thông báo của FG service -->
+
+    <!-- Android 13+: nếu hiển thị notification của FG service -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Testapp">
@@ -26,12 +28,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Overlay panel (bong bóng) -->
+        <!-- Overlay chạy foreground (đỡ bị kill) -->
         <service
             android:name=".service.OverlayService"
             android:exported="false" />
 
-        <!-- AccessibilityService để auto click/scroll -->
+        <!-- AccessibilityService để auto click -->
         <service
             android:name=".service.AutoAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"

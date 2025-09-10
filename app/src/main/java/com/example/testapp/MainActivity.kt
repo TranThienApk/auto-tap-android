@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.max
 
 class MainActivity : ComponentActivity() {
 
@@ -81,14 +82,14 @@ class MainActivity : ComponentActivity() {
         tgAuto.setOnCheckedChangeListener { _, on ->
             if (on) {
                 if (FrameBus.latest.value == null) {
-                    tv.text = "Chưa có frame. Hãy bấm 'Xin quyền ghi màn hình' rồi bật lại."
+                    tv.text = "Chưa có frame. Bấm 'Xin quyền ghi màn hình' rồi bật lại."
                     tgAuto.isChecked = false; return@setOnCheckedChangeListener
                 }
                 lifecycleScope.launch {
                     val frame = FrameBus.latest.filterNotNull().first()
                     val roi = HpAutoRoi.detectHpRoiPct(frame)
                     if (roi == null) {
-                        tv.text = "Không tìm thấy thanh HP. Hãy bật khi dải trắng rõ."
+                        tv.text = "Không tìm thấy thanh HP. Bật khi dải trắng rõ."
                         tgAuto.isChecked = false; return@launch
                     }
                     hpRoi = roi; hpEma = null
@@ -103,7 +104,7 @@ class MainActivity : ComponentActivity() {
                                 val pct = hpEma ?: raw
                                 tv.text = "HP: ${(pct*100).toInt()}% | ROI x=%.3f y=%.3f"
                                     .format(roi.x, roi.y)
-                                // TODO: nếu pct < NGƯỠNG -> gọi Accessibility để tap mua máu
+                                // TODO: nếu pct < NGƯỠNG -> gọi Accessibility tap mua máu
                             }
                             delay(120)
                         }
@@ -118,30 +119,30 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startCapture() {
-        val (w, h, dpi) = run {
-            val wm = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val b = wm.currentWindowMetrics.bounds
-                val dm = resources.displayMetrics
-                Triple(b.width(), b.height(), dm.densityDpi)
-            } else {
-                val dm = resources.displayMetrics
-                Triple(dm.widthPixels, dm.heightPixels, dm.densityDpi)
-            }
-        }
+        // Dùng kích thước an toàn: ≤1280 và bội số 8 (tránh crash stride)
+        val dm = resources.displayMetrics
+        val srcW = dm.widthPixels
+        val srcH = dm.heightPixels
+        val targetW = 1280
+        val scale = if (srcW > targetW) targetW / srcW.toFloat() else 1f
+        val w = roundTo8((srcW * scale).toInt().coerceAtLeast(320))
+        val h = roundTo8((srcH * scale).toInt().coerceAtLeast(320))
+        val dpi = dm.densityDpi
+
         capturer?.stop()
-        capturer = com.example.testapp.capture.ScreenCapture(this).apply {
-            start(requireNotNull(projection), w, h, dpi) { bmp ->
-                FrameBus.update(scaleIfNeeded(bmp, 1280))
+        capturer = ScreenCapture(this).apply {
+            try {
+                start(requireNotNull(projection), w, h, dpi) { bmp ->
+                    FrameBus.update(bmp) // đã nhỏ sẵn
+                }
+                findViewById<TextView>(R.id.tvStatus).text = "Đang capture: ${w}x${h}"
+            } catch (t: Throwable) {
+                findViewById<TextView>(R.id.tvStatus).text = "Capture error: ${t.javaClass.simpleName}"
             }
         }
     }
 
-    private fun scaleIfNeeded(src: Bitmap, targetW: Int): Bitmap {
-        if (src.width <= targetW) return src
-        val r = targetW.toFloat() / src.width
-        return Bitmap.createScaledBitmap(src, targetW, (src.height * r).toInt().coerceAtLeast(1), false)
-    }
+    private fun roundTo8(v: Int): Int = max(8, (v / 8) * 8)
 
     private fun requestOverlayIfNeeded() {
         if (!Settings.canDrawOverlays(this)) {

@@ -29,9 +29,14 @@ class ScreenCapture(private val context: Context) {
             try { imageToBitmap(img)?.let(onFrame) } catch (_: Throwable) {} finally { img.close() }
         }, handler)
 
-        vd = projection?.createVirtualDisplay(
-            "SCAPTURE", width, height, dpi, 0, imageReader?.surface as Surface, null, null
-        )
+        vd = try {
+            projection?.createVirtualDisplay(
+                "SCAPTURE",
+                width, height, dpi, 0,
+                imageReader?.surface as Surface,
+                null, null
+            )
+        } catch (_: Throwable) { null }
     }
 
     fun stop() {
@@ -48,7 +53,10 @@ class ScreenCapture(private val context: Context) {
         val ps = plane.pixelStride
         val rs = plane.rowStride
         val pad = rs - ps * image.width
-        val tmp = Bitmap.createBitmap(image.width + maxOf(0, pad / ps), image.height, Bitmap.Config.ARGB_8888)
+        val tmp = Bitmap.createBitmap(
+            image.width + maxOf(0, pad / ps),
+            image.height, Bitmap.Config.ARGB_8888
+        )
         val buf: ByteBuffer = plane.buffer
         buf.rewind()
         tmp.copyPixelsFromBuffer(buf)

@@ -1,5 +1,7 @@
 package com.example.testapp.service
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -8,16 +10,27 @@ import android.os.Build
 import android.os.IBinder
 import android.view.*
 import android.widget.Button
+import androidx.core.app.NotificationCompat
 import com.example.testapp.R
 
 class OverlayService : Service() {
     private lateinit var wm: WindowManager
     private var view: View? = null
+    private val CHANNEL_ID = "overlay_fg"
 
     override fun onCreate() {
         super.onCreate()
-        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        createChannelIfNeeded()
+        startForeground(
+            1,
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("Overlay đang chạy")
+                .setOngoing(true)
+                .build()
+        )
 
+        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val type = if (Build.VERSION.SDK_INT >= 26)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         else WindowManager.LayoutParams.TYPE_PHONE
@@ -34,17 +47,14 @@ class OverlayService : Service() {
         lp.x = 60; lp.y = 180
 
         view = LayoutInflater.from(this).inflate(R.layout.overlay_small, null).apply {
-            // Nút TAP: ví dụ tap vào giữa màn hình
             findViewById<Button>(R.id.btnTap).setOnClickListener {
-                // Gọi accessibility service để tap
-                (getSystemService(ACCESSIBILITY_SERVICE) as? AutoAccessibilityService)
-                    ?.tap(resources.displayMetrics.widthPixels / 2f,
-                          resources.displayMetrics.heightPixels / 2f)
+                // ví dụ: tap giữa màn hình (cần bật Trợ năng)
+                val dm = resources.displayMetrics
+                AutoAccessibilityService.safeTap(dm.widthPixels/2f, dm.heightPixels/2f)
             }
-            // Đóng overlay
             findViewById<Button>(R.id.btnClose).setOnClickListener { stopSelf() }
 
-            // Kéo thả bong bóng
+            // kéo thả bong bóng
             setOnTouchListener(object : View.OnTouchListener {
                 var px = 0f; var py = 0f; var ox = 0; var oy = 0
                 override fun onTouch(v: View, e: MotionEvent): Boolean {
@@ -61,6 +71,16 @@ class OverlayService : Service() {
             })
         }
         wm.addView(view, lp)
+    }
+
+    private fun createChannelIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            val chan = NotificationChannel(
+                CHANNEL_ID, "Overlay", NotificationManager.IMPORTANCE_LOW
+            )
+            getSystemService(NotificationManager::class.java)
+                ?.createNotificationChannel(chan)
+        }
     }
 
     override fun onDestroy() {
