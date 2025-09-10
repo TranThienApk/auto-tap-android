@@ -3,82 +3,57 @@ package com.example.testapp.capture
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
-import android.hardware.display.VirtualDisplay
 import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
-import android.os.Handler
-import android.os.HandlerThread
-import android.util.Log
+import android.view.Surface
 import java.nio.ByteBuffer
 
 class ScreenCapture(private val context: Context) {
     private var imageReader: ImageReader? = null
-    private var virtualDisplay: VirtualDisplay? = null
-    private var handlerThread: HandlerThread? = null
-    private var frameCount = 0
+    private var vd: android.hardware.display.VirtualDisplay? = null
+    private var projection: MediaProjection? = null
+    private var handlerThread: android.os.HandlerThread? = null
+    private var handler: android.os.Handler? = null
 
-    fun start(
-        projection: MediaProjection,
-        width: Int,
-        height: Int,
-        density: Int,
-        onFrame: (Bitmap) -> Unit
-    ) {
+    fun start(mp: MediaProjection, width: Int, height: Int, dpi: Int, onFrame: (Bitmap) -> Unit) {
         stop()
-
-        handlerThread = HandlerThread("SC-Capture").apply { start() }
-        val handler = Handler(handlerThread!!.looper)
-
+        projection = mp
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-        virtualDisplay = projection.createVirtualDisplay(
-            "AutoTapActivityCapture",
-            width, height, density,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader!!.surface, null, handler
-        )
 
-        imageReader!!.setOnImageAvailableListener({ reader ->
-            var image: Image? = null
-            try {
-                image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
-                val bmp = image.toBitmapSafely() ?: return@setOnImageAvailableListener
+        handlerThread = android.os.HandlerThread("SCapture").apply { start() }
+        handler = android.os.Handler(handlerThread!!.looper)
 
-                // Throttle: chỉ gửi mỗi 2 frame để giảm tải
-                frameCount++
-                if (frameCount % 2 == 0) onFrame(bmp)
-            } catch (t: Throwable) {
-                Log.w("ScreenCapture", "frame error: ${t.message}")
-            } finally {
-                try { image?.close() } catch (_: Throwable) {}
-            }
+        imageReader?.setOnImageAvailableListener({ r ->
+            val img = r.acquireLatestImage() ?: return@setOnImageAvailableListener
+            try { imageToBitmap(img)?.let(onFrame) } catch (_: Throwable) {} finally { img.close() }
         }, handler)
+
+        vd = projection?.createVirtualDisplay(
+            "SCAPTURE", width, height, dpi, 0, imageReader?.surface as Surface, null, null
+        )
     }
 
     fun stop() {
-        try { virtualDisplay?.release() } catch (_: Throwable) {}
+        try { vd?.release() } catch (_: Throwable) {}
+        vd = null
         try { imageReader?.close() } catch (_: Throwable) {}
-        virtualDisplay = null
         imageReader = null
-        handlerThread?.quitSafely(); handlerThread = null
+        try { handlerThread?.quitSafely() } catch (_: Throwable) {}
+        handler = null; handlerThread = null
     }
-}
 
-private fun Image.toBitmapSafely(): Bitmap? {
-    val plane = planes[0]
-    val buffer: ByteBuffer = plane.buffer
-    val pixelStride = plane.pixelStride
-    val rowStride = plane.rowStride
-    val rowPadding = rowStride - pixelStride * width
-    if (pixelStride <= 0 || rowStride <= 0) return null
-
-    val tmp = Bitmap.createBitmap(
-        width + rowPadding / pixelStride,
-        height,
-        Bitmap.Config.ARGB_8888
-    )
-    tmp.copyPixelsFromBuffer(buffer)
-    // cắt bỏ phần padding sang đúng kích thước
-    return if (rowPadding != 0) Bitmap.createBitmap(tmp, 0, 0, width, height) else tmp
+    private fun imageToBitmap(image: Image): Bitmap? {
+        val plane = image.planes[0]
+        val ps = plane.pixelStride
+        val rs = plane.rowStride
+        val pad = rs - ps * image.width
+        val tmp = Bitmap.createBitmap(image.width + maxOf(0, pad / ps), image.height, Bitmap.Config.ARGB_8888)
+        val buf: ByteBuffer = plane.buffer
+        buf.rewind()
+        tmp.copyPixelsFromBuffer(buf)
+        val out = Bitmap.createBitmap(tmp, 0, 0, image.width, image.height)
+        if (out !== tmp) tmp.recycle()
+        return out
+    }
 }
