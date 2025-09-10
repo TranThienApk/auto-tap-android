@@ -4,33 +4,22 @@
     android:layout_width="match_parent" android:layout_height="match_parent">
 
     <Button
-        android:id="@+id/btnStartCapture"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Bắt đầu quay màn hình" />
+        android:id="@+id/btnOverlay"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Bật cửa sổ nổi" />
 
-    <ToggleButton
-        android:id="@+id/tgAuto"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textOn="Tự đọc HP: ON"
-        android:textOff="Tự đọc HP: OFF"
-        android:layout_marginTop="12dp"/>
+    <Button
+        android:id="@+id/btnAskProjection"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Xin quyền ghi màn hình" android:layout_marginTop="12dp"/>
+
+    <Button
+        android:id="@+id/btnOpenAccessibility"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Bật Trợ năng (Auto click)" android:layout_marginTop="12dp"/>
 
     <TextView
         android:id="@+id/tvStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="HP: -- %   ROI: chưa có"
-        android:layout_marginTop="12dp" />
-
-    <!-- ✅ Preview để biết có frame hay không -->
-    <ImageView
-        android:id="@+id/ivPreview"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="12dp"
-        android:layout_weight="1"
-        android:adjustViewBounds="true"
-        android:scaleType="centerInside"/>
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Status: idle" android:layout_marginTop="12dp"/>
 </LinearLayout>
